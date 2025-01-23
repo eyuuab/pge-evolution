@@ -6,8 +6,7 @@
 
 ;; createGenotype of a specified length in the range[0,1] and rounded off 
 ;; Parameters:- 
-;;          $lb lower bound
-;;          $ub upper bound
+;;          $len length of the genotype tuple
 ;;          $prec signinfican digits for round function
 ;; Example :- 
 ;;          (createGenotype 6 2)
@@ -33,7 +32,7 @@
 ;; Example:- 
 ;;          (start ((expr) 0)) -- the first, and in this case the last, derivation rule for the "start" non-terminal 
 ;;          (op (("*") 1)) -- the second derivation rule for the "op" non-terminal
-;;          probability values will be appended to this representation like as follows
+;;          probability values will be appended to this representation as follows
 ;;          (start ((expr prob_val) 0))
 ;;          (op (("*" prob_val) 1))
 ;;          prob_val being the probablity assigned to the particular derivation rule
@@ -101,15 +100,15 @@
             
 (= (getOption $grammarSpace $nt $genotypeProb $initialCumProb $index)
     (match $grammarSpace ($nt (($x $prob) $index)) 
-                        (if (<= $genotypeProb (+ $prob $initialCumProb)) 
-                            $x 
-                            (let* 
-                                (
-                                    ($cumProb (+ $prob $initialCumProb))
-                                    ($next (+ $index 1))
-                                )
-                                (getOption $grammarSpace $nt $genotypeProb $cumProb $next)
-                            ))))
+            (if (<= $genotypeProb (+ $prob $initialCumProb)) 
+                $x 
+                (let* 
+                    (
+                        ($cumProb (+ $prob $initialCumProb))
+                        ($next (+ $index 1))
+                    )
+                    (getOption $grammarSpace $nt $genotypeProb $cumProb $next)
+                ))))
 ;; Original function used to get the expansion options of a literal non-terminal (not an expression like (expr or expr))
 
 (= (ntByt $grammarSpace $symbol $genotype $index)
@@ -196,6 +195,7 @@
                     (generateIndividual $grammarSpace $nextRule ((py-atom random.random)))
                 )))))
 ;; Helper function to apply the main function generateIndividual iteratively for derivation options like (expr op expr)
+;; This will changed by using accumulator and append function -- faster execution
 
 (= (apply $func $arg $expr $startIndex $dummy)
     (let* 
