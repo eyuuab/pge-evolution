@@ -152,7 +152,7 @@
 ! (updateProbablity &grammar &count 0.05)
 
 ;; CHECK THE UPDATE 
-;; unused rules will have their probablity values decreased while used rules's probablity values will be increased
+;; unused rules will have their probablity values decreased while used rules' probablity values will be increased
 ! (get-atoms &grammar)
 
 ;; normalize -- adjusts probabilities of derivation rules sum to be exactly one
