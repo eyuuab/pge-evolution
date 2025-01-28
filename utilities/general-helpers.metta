@@ -162,3 +162,11 @@
                 (let $d (map $func $dummy $t)
                     (cons-atom $c $d)
                 )))))
+
+;; append atom to the end of an expression
+
+(= (append $acc $x)(collapse (union (superpose $acc) $x)))
+
+;; min finds minimum of two numbers
+(: min (-> Number Number Number))
+(= (min $x $y) (if (<= $x $y) $x $y))
