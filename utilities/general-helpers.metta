@@ -170,3 +170,35 @@
 ;; min finds minimum of two numbers
 (: min (-> Number Number Number))
 (= (min $x $y) (if (<= $x $y) $x $y))
+
+;; slice -- gets a range of values within the specified start and end indices values
+;;          $expr -- tuple to be sliced
+;;          $s -- start index of the slicer
+;;          $e -- end index of the slicer
+;;          $acc -- an empty accumulator -- ** an implementation without an accumulator should be possible **
+;;          start and end indices check could be added to make sure the indices are not out of bounds
+
+(= (slice $expr $s $e $acc)
+    (let ($f $t) (decons $expr)
+        (if (== $s 0)
+            (let $c (append $acc $f)
+                (if (== $e 0)
+                    $c
+                    (slice $t 0 (- $e 1) $c)
+                )
+            )
+            (slice $t (- $s 1) (- $e 1) $acc)
+        )))
+
+(= (max $x $y) (if (>= $x $y) $x $y))
+
+;; maxIter -- finds maximum from a tuple of numerals
+
+(= (maxIter $expr)
+    (let ($f $t) (decons $expr)
+        (if (== $t ())
+            $f
+            (max $f (maxIter $t))
+        )
+    )
+)

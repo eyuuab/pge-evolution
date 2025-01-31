@@ -59,10 +59,7 @@
         )
         (if (== $t ())
             $carry
-            (getRuleCount $countSpace $t $carry)
-        )
-    )
-)
+            (getRuleCount $countSpace $t $carry))))
 
 ;; updateProbablity -- updates probability of a derivation rules based on count information from &count space 
 (= (updateProbablity $grammarSpace $countSpace $lambda)
