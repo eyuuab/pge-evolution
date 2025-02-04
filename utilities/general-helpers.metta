@@ -202,3 +202,30 @@
         )
     )
 )
+
+
+; Concatenates two tuples $xs and $ys e.g (concatTuple (1 2 3) (4 5)) -> (1 2 3 4 5)
+
+(= (concatTuple $xs $ys ) (collapse (union (superpose $xs) (superpose $ys))))
+
+;; This function slices a tuples at the given index and returns a tuple of the sliced part and the remaining tuple.
+;;              Example: (slice (1 2 3 4 5) 2 ()) -> ((1 2 3) (4 5))
+(: slice (-> Expression Number Expression Expression))
+(= (slice $lst $index $acc)
+    (if (or (== $lst ()) (< $index 0))
+        $acc
+        (let*
+            (
+                ($head (car-atom $lst))
+                ($tail (cdr-atom $lst))
+                ($newAcc (append $acc $head))
+                
+            )
+            (if (== $index 0)
+                ($newAcc $tail)
+                (slice $tail (- $index 1) $newAcc)
+            )
+                
+        )
+    )
+)
