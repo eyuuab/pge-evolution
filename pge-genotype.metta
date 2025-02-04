@@ -1,371 +1,509 @@
 ! (register-module! ./utilities)
 ! (import! &self utilities:general-helpers)
 
-;; bind python's round function to rd
+;; python bindings for random number generation and rounding
 ! (bind! np (py-atom numpy))
 ! (bind! rd (py-atom round))
 
+;; &grammar -- space for grammar rule, genotype
+! (bind! &grammar (new-space))
+! (bind! &geno (new-space))
+! (bind! &count (new-space))
+
+!(add-atom &grammar (start expr 0))
+!(add-atom &grammar (expr (bop expr expr) 0))
+!(add-atom &grammar (expr (uop expr) 1))
+!(add-atom &grammar (expr term 2))
+!(add-atom &grammar (bop AND 0))
+!(add-atom &grammar (bop OR 1))
+!(add-atom &grammar (uop NOT 0))
+!(add-atom &grammar (term X 0))
+!(add-atom &grammar (term Y 1))
+
+;; ::::::::::::: CREATING GENOTYPE :::::::::::::
 ;; createGenotype of a specified length in the range[0,1] and rounded off 
 ;; Parameters:- 
-;;          $len length of the genotype tuple
+;;          $n length of the genotype tuple
 ;;          $prec signinfican digits for round function
+;;          $r a random float in the range (0 1) 
+;;          $c carries recursive calls to the createGenotype function with updated length (- $len 1) parameter
 ;; Example :- 
-;;          (createGenotype 6 2)
-;;          -- 1st run -- (0.82 0.78 0.91 0.61 0.92 0.5)
-;;          -- 2nd run -- (0.79 0.58 0.19 0.01 0.03 0.18)
-;;          -- 3rd run -- (0.1 0.31 0.04 0.86 0.74 0.18)
+;;          (createGenotype 9 3)
+;;          -- 1st run -- (0.227 0.584 0.498 0.364 0.912 0.881 0.504 0.206 0.119)
+;;          -- 2nd run -- (0.71 0.511 0.312 0.676 0.281 0.669 0.128 0.857 0.848)
+;;          -- 3rd run -- (0.467 0.206 0.563 0.957 0.029 0.907 0.423 0.675 0.231)
 
 (: (createGenotype (-> Number Number Expression)))
-(= (createGenotype $len $prec)
-    (if (== $len 0)
+(= (createGenotype $n $prec $random)
+    (if (== $n 0)
         ()
         (let* 
             (   
-                ($first (rd ((py-dot np random.uniform)0 1) $prec))
-                ($c (createGenotype (- $len 1) $prec))
+                ($r (rd ((py-dot np random.uniform)0 1) $prec))
+                ($c (createGenotype (- $n 1) $prec ((py-dot np random.uniform)0 1)))
             )
-            (cons-atom $first $c)
-            )))
-
-;; Proabilistic Context Free Grammar (PCFG) representaion
-;;          &grammar space created
-;; Grammar rules added to the space as (non-terminal ((derivation_option) $ordering_index))
-;; Example:- 
-;;          (start ((expr) 0)) -- the first, and in this case the last, derivation rule for the "start" non-terminal 
-;;          (op (("*") 1)) -- the second derivation rule for the "op" non-terminal
-;;          probability values will be appended to this representation as follows
-;;          (start ((expr prob_val) 0))
-;;          (op (("*" prob_val) 1))
-;;          prob_val being the probablity assigned to the particular derivation rule
-
-! (bind! &grammar (new-space)) ;; for grammar use
-! (bind! &geno (new-space)) ;; for genotype related
-
-! (add-atom &grammar (start ((expr) 0)))
-! (add-atom &grammar (expr (((expr op expr)) 0)))
-! (add-atom &grammar (expr ((var) 1)))
-! (add-atom &grammar (op (("+") 0)))
-! (add-atom &grammar (op (("*") 1)))
-! (add-atom &grammar (op (("-") 2)))
-! (add-atom &grammar (var ((x) 0)))
-! (add-atom &grammar (var ((1.0) 1)))
-
-;; getNt -- gets the non-terminals from the grammar space
-
-(= (getNt $grammarSpace)
-    (collapse (unique (match &grammar ($nt $rule) $nt)))
-)
-;; updateRule -- updates the grammar space with rules conatining probablity values and deletes the old representation
-;;          
-
-(= (updateRule $grammarSpace $nt $len)
-    (let () (match $grammarSpace ($nt (($x) $n)) (add-atom $grammarSpace ($nt (($x (rd (/ 1 $len) 2)) $n))))
+            (cons-atom $r $c))))
     
-        (match $grammarSpace ($nt (($x) $n)) (remove-atom $grammarSpace ($nt (($x) $n))))
-    )
-)
-;; assignInitialProbs applies the updateRule function for all the non-terminals 
+;; setGenotype -- calculates the number of all derivation rules ($n) and calls the createGenotype 
+;;                function to generate tuple of uniform random values of length $n
+;;              gSpace -- grammar space
+;;              tSpace -- genotype space
+;;              $n -- total number of derivation rules in the grammar
+;;              $nt -- a non-terminal
+;;              $r -- a production rule
+;;              $i -- index of a derivation rule in a non-terminal
+;;              $g -- generated genotype
+;;              3 -- decimal places to rounding off to
 
-(= (assignInitialProbs $grammarSpace $ntSet)
-        (if (== $ntSet ())
-            (empty)
-            (let* 
-                (   
-                    (($nt $tail) (decons $ntSet))
-                    ($len (sum (collapse (match $grammarSpace ($nt $x) 1))))
-                    (() (updateRule $grammarSpace $nt $len))
-                )
-                (assignInitialProbs $grammarSpace $tail)
-            ))) 
+(= (setGenotype $gSpace $tSpace $random)
+    (let*
+        (   
+            ($n (sum (collapse (match $gSpace ($nt $r $i) 1))))
+            ($g (createGenotype $n 3 ((py-dot np random.uniform)0 1)))
+            ($geno (genotype $g))
+            (() (match $tSpace (genotype $genotype) (remove-atom $tSpace (genotype $genotype))))
+            (() (println! $geno))
+        )
+         (add-atom $tSpace $geno)))
 
-;; ************ initialize initial probabality for grammar derivation options ***********
+; ! (setGenotype &grammar &geno)
 
-(= (initP $grammarSpace)
-    (let $ntSet (getNt $grammarSpace)
-        (assignInitialProbs $grammarSpace $ntSet)
-    )
-)
-; ! (initP &grammar) ;; better call this after the length parameter of the setGenotype function has been set 
+;; ::::::::::::: ASSIGNING INITIAL PROBABILITIES :::::::::::::
+;; iProbs -- assigns equal probability values for production rules in a non-terminal
+;;          counts the total number of production rules ($n) assigns 1/n to each production rule
+;;          adds the new production rule atoms to the sapce like ($nt $r $iP $i)
+;;          $gSpace -- grammar space
+;;          $nts -- all unique non-terminals in the production rule
+;;          $nt -- a non-terminal
+;;          $r -- a 
+;;          $i -- production rule index
+;;          $nr -- number of production rules for a non-terminal
+;;          $iP -- initial probability
+;;          3 -- decimal places to rounding off to
+;; Note:-   iProbs doesn't remove the old grammar pattern it just adds a new pattern with probability values
+;;          So when queries with (get-atoms) attoms with the old pattern ($nt $r $i) are returned as well
 
-;; *********************************************************************************************
-;; *********************************************************************************************
-;; 
-;; getOption gets the correct expansion option based on cummulative probablity values
-;; Parameteres:- 
-;;               $genotypeProb -- probabilty of derviation options from the genotype list of probablity values
-;;               $initialCumProb -- the initial cummulative probablity that starts as 0 and keeps being updated
-;;               $index -- index of the expansion options for a given non-terminal for ordered exploration,  it starts as 0
+(= (iProbs $gSpace)
+    (let*
+        (
+            ($nts (collapse (unique (match $gSpace ($nt $r $i) $nt))))
+            ($nt (superpose $nts))
+            ($nr (sum (collapse (match $gSpace ($nt $r $i) 1))))
+            ($iP (rd (/ 1 $nr) 3))
+        )
+        (match $gSpace ($nt $r $i) (add-atom $gSpace ($nt $r $iP $i)))))
+
+! (iProbs &grammar)
+; ! (get-atoms &grammar)
+
+;; ::::::::::::: PICKING PRODUCTION RULES BASED ON GENOTYPE AND CUMMULATIVE PROBABILITIES :::::::::::::
+;; getRule gets the correct production rule based on cummulative probablity values
+;; Parameteres:- $nt -- a non-terminal
+;;               $gSpace -- grammar space
+;;               $cSpace -- count space
+;;               $tProb -- probabilty of derviation options from the genotype tuple
+;;               $iCProb -- the initial cummulative probablity that starts as 0 and keeps being updated
+;;               $i -- index of the expansion options for a given non-terminal for ordered exploration,  it starts as 0
+;;               $dummy -- needed to prevent metta from caching results of recursive calls
+;; $internal variables 
+;;               $nt -- a non-terminal
+;;               $r -- a production rule
+;;               $p -- probablity value associated with a 
+;;               $i -- production rule index
 ;; Examples:- 
-;;               (getOption &grammar start 0.61 0 0) -- expr             
-;;               (getOption &grammar expr 0.5 0 0) --  (expr op expr)             
-;;               (getOption &grammar expr 0.7 0 0) -- var             
+;;               (getRule start &grammar 0.61 0 0) -- expr             
+;;               (getRule expr &grammar 0.26 0 0) -- (bop expr expr)           
+;;               (getRule expr &grammar 0.7 0 0) -- term             
             
-(= (getOption $grammarSpace $nt $genotypeProb $initialCumProb $index $dummy)
-    (match $grammarSpace ($nt (($x $prob) $index)) 
-            (if (<= $genotypeProb (+ $prob $initialCumProb)) 
-                $x 
-                (let* 
-                    (
-                        ($cumProb (+ $prob $initialCumProb))
-                        ($next (+ $index 1))
-                    )
-                    (getOption $grammarSpace $nt $genotypeProb $cumProb $next $dummy)
-                ))))
-;; Original function used to get the expansion options of a literal non-terminal (not an expression like (expr or expr))
+(= (getRule $nt $gSpace $cSpace $tProb $iCProb $i $dummy)
+    (match $gSpace ($nt $r $p $i) 
+            (if (<= $tProb (+ $p $iCProb))
+                (let () (prCounter $cSpace $nt $r ((py-dot np random.uniform)0 1))
+                    $r)
+                (getRule $nt $gSpace $cSpace $tProb (+ $p $iCProb) (+ $i 1) $dummy))))
 
-(= (ntByt $grammarSpace $symbol $genotype $index)
-        (let $ntSet (start expr op var)
-        (if (or (not (isMember $symbol $ntSet)) (== $index (len $genotype)))
-            ($symbol $index)
+;; ::::::::::::: SET AND GET CODON :::::::::::::
+;; initialize codon index 0
+! (add-atom &geno (codon-index 0))
+! (add-atom &geno (genotype (0 1 2 3 4)))
+
+;; getCodon -- returns a codon from the genotype by using an index value
+;;          $tSpace -- genotype space -- contains codon-index as well
+;;          $gSpace -- grammar space
+;;          $dummy -- needed to prevent metta from caching results of recursive calls
+;;              $i -- index gotten from &geno (codon-index $i)
+;;              $g -- a genotype tuple
+;;              $len -- length of genotype tuple
+;;              $index -- value in the range [0 (- $len 1)] obtained using module 
+
+(= (getCodon $tSpace $gSpace $dummy)
+    (let*
+        ( 
+            ($i (match $tSpace (codon-index $ind) $ind))
+             (() (println! ("codon index " $i)))
+            ($g (match $tSpace (genotype $geno) $geno))
+            ($len (sum (collapse (match $gSpace ($nt $r $p $index) 1))))
+            ($index (% $i $len))
+           
+        )
+        (selectByIndex $g $index)))
+
+;; updateIndex -- increments the codon-index value by 1 when called
+;;              $tSpace -- genotype space
+;;              $dummy -- needed to prevent metta from caching results of recursive calls
+;;                  $i -- old index
+;;                  $next -- new index (+ 1 $i)
+
+(= (updateIndex $tSpace $dummy)
+    (let*
+        (
+            ($i (match $tSpace (codon-index $i) $i))
+            (() (remove-atom $tSpace (codon-index $i)))
+            ($next (+ 1 $i))
+        )
+        (add-atom $tSpace (codon-index $next))))
+
+;; ::::::::::::: GENERATE PHENOTYPE :::::::::::::
+;; genPhen -- generates phenotype starting from start symbol and using the genotype information to map productio rules
+;;          $gSpace -- grammar space
+;;          $tSpace -- genotype space
+;;          $start -- the start symbol
+;;          $random -- needed to prevent metta from caching results of recursive calls
+;;              $codon -- a probablity value gotten from &tSpace
+;;              $nts -- a set of unique non-terminals of the grammar
+;;              
+
+(= (genPhen $gSpace $cSpace $tSpace $nts $start $maxIter $random)
+    (if (and (isLiteral $start) (not (isMember $start $nts)))
+        $start
+        (if (== (get-metatype $start) Expression)
             (let* 
                 (
-                    ($genotypeProb (selectByIndex $genotype $index))
-                    (() (println! ("Next genotype prob" $genotypeProb)))
-                    ($nextRule (getOption $grammarSpace $symbol $genotypeProb 0 0))
-                    (() (println! ("Next rule" $nextRule)))
-                    ; ($next (% (+ 1 $index) (len $genotype)))
-                    ($next (+ 1 $index))
+                    (($f $t) (decons $start))
+                    ($mapped (genPhen $gSpace $cSpace $tSpace $nts $f $maxIter ((py-atom random.random))))
+                    (() (println! ("mapped    " $mapped))))
+                (if (== $t ())
+                    (cons-atom $mapped $t)
+                    (let $r (genPhen $gSpace $cSpace $tSpace $nts $t $maxIter ((py-atom random.random)))
+                        (cons-atom $mapped $r))))                  
+            (let*
+                (
+                    ($codon (getCodon $tSpace $gSpace ((py-dot np random.uniform)0 1)))
+                    ($nextRule (getRule $start $gSpace $cSpace $codon 0 0 ((py-atom random.random))))
+                    (() (println! ("next codon " $codon)))
+                    (() (println! ("next rule " $nextRule)))
+                    (() (updateIndex $tSpace ((py-dot np random.uniform)0 1)))
+                    ($codonIndex (match $tSpace (codon-index $i) $i))
                 )
-                (ntByt $grammarSpace $nextRule $genotype $next)
-            ))))
+                (if (< $codonIndex $maxIter)
+                    (genPhen $gSpace $cSpace $tSpace $nts $nextRule $maxIter ((py-dot np random.uniform)0 1))
+                    ()
+                )
+                ))))
 
-;; *********              ***********
-;; ********* NEW APPROACH ***********
-;; *********              ***********
-;; *********              ***********
+;; genI -- generates an individual expression 
+;;          $gSpace -- grammar space
+;;          $tSpace -- genotype space
+;;          $start -- start symbol
+;;          $random -- needed to prevent metta from caching results of recursive calls
+;;              $nts -- tuple of unique non-terminals
+;;              $maxIter -- tuple of unique non-terminals
 
-;; add a codon index in space, &geno -- space for info related to genotype
-;; genotype, codon index
-! (add-atom &geno (codon-index 0))
-
-;; setGenotype  -- store the genotype in space for consistency of approach -- might be overkill
-;;              $length -- length of the genotype tuple
-;;              2 -- rounding
-
-(= (setGenotype $genoSpace $grammarSpace)
+(= (genI $gSpace $cSpace $tSpace $start $random)
     (let* 
         (
-            ($len (setLen $grammarSpace))
-            ($genotype (createGenotype $len 2))
+            ($nts (collapse (unique (match $gSpace ($nt $r $i) $nt))))
+            ($maxIter (* (sum (collapse (match $gSpace ($nt $r $i) 1))) 1))
         )
-        (add-atom $genoSpace (genotype $genotype))
-    )
-)
-;; getRuleLength to use in the genotype creation -- should at least be long enough to allow for unique assignment for each rule in one pass
+        (genPhen $gSpace $cSpace $tSpace $nts $start $maxIter ((py-dot np random.uniform)0 1))
+        ))
+; ! (genI &grammar &count &geno start ())
+;; ::::::::::::: TEST GENERATE INIDVIDUAL :::::::::::::
+; ! (genI &grammar &geno start ((py-atom random.random)))
+; ! (get-atoms &geno)
 
-(= (setLen $grammarSpace)
-    (sum (collapse (match $grammarSpace ($nt (($x) $index)) 1)))
-)
+;; ;; ::::::::::::: GENERATE GENERATION :::::::::::::
+;; genG -- generate a single generation of size n
+;;          $n -- population size
+;;          $gSpace -- grammar space
+;;          $tSpace -- genotype space
+;;          $genSpace -- space for population
+;;          $start -- start symbol 
+;;          $random -- needed to prevent metta from caching results of recursive calls
+;;          $id -- id for indvidual
+;;              $i -- indvidual expression
 
-; ! (setGenotype &geno &grammar)
-; ! (match &geno (genotype $x) $x)
-;; getCodon -- gets a codon in the genotype from 
-(= (getCodon $genoSpace $dummy)
-    (let*
-        (
-            ($index (match $genoSpace (codon-index $x) $x))
-            ($genotype (match $genoSpace (genotype $g) $g))
-            ($i (% $index 8)) ;; to enable wrapping around genotype 
-            (() (println! ("Codon index " $index)))
-        )
-        (selectByIndex $genotype $i)
-    )
-)
-;; updateIndex -- increments the codon-index value by 1 when called
+! (bind! &generation (new-space))
 
-(= (updateIndex $genoSpace $rndm)
-    (let*
-        (
-            ($index (match $genoSpace (codon-index $x) $x))
-            (() (println! ("index  " $index)))
-            (() (remove-atom $genoSpace (codon-index $index)))
-            ($next (+ 1 $index))
-        )
-        (add-atom $genoSpace (codon-index $next))
-    )
-)
-
-;; generateIndividual expand a non-terminal into terminal only expressions
-
-(= (generateIndividual $grammarSpace $genoSpace $start $random)
-    (let*
-        (
-            ($codon (getCodon $genoSpace ((py-dot np random.uniform)0 1))) ;; gets the corresponding codon in the geotype
-            ($ntSet (start expr var op))
-        )
-        (if (and (isLiteral $start) (not (isMember $start $ntSet)))
-            $start
-            (if (== (get-metatype $start) Expression)
-                ; (iterate $func $arg1 $arg2 $expr $acc $dummy)
-                (iterate generateIndividual $grammarSpace $genoSpace $start ((py-dot np random.uniform)0 1) ())
-                ; (apply generateIndividual $grammarSpace $genoSpace $start 0 ((py-dot np random.uniform )0 1))
-                (let*
-                    (
-                        ; (() (println! ("current rule" $start)))
-                        ($nextRule (getOption $grammarSpace $start $codon 0 0 ((py-dot np random.uniform)0 1)))
-                        (() (println! ("next codon " $codon)))
-                        (() (println! ("next rule " $nextRule)))
-                        (() (updateIndex $genoSpace ((py-dot np random.uniform)0 1)))
-                        (() (println! ("updated index " (match $genoSpace (codon-index $x) $x))))
-                    )
-                    (generateIndividual $grammarSpace $genoSpace $nextRule ((py-dot np random.uniform)0 1))
-                )))))
-;; Helper function to apply the main function generateIndividual iteratively for derivation options like (expr op expr)
-;; This will changed by using accumulator and append function -- faster execution
-
-(= (apply $func $arg1 $arg2 $expr $startIndex $dummy)
-    (let* 
-        (   ($len (length $expr))
-            ; (() (println! ("length " $len)))
-            ($e (selectByIndex $expr $startIndex))
-            ($new ($func $arg1 $arg2 $e ((py-dot np random.uniform))))
-            (() (println! ("new " $new)))
-            ($updated (replaceByIndex $expr $startIndex $new))
-            (() (println! ("updated " $updated)))
-            ($current (+ 1 $startIndex))
-        )
-        (if (< $current $len)
-            (apply $func $arg1 $arg2 $updated $current ((py-dot np random.uniform)0 1))
-            $updated
-        )))
-
-(= (iterate $func $arg1 $arg2 $expr $dummy $acc)
-    (if (== $expr ())
-        $acc
-        (let* 
-            (
-                (($f $t) (decons $expr))
-                ($r ($func $arg1 $arg2 $f ((py-dot np random.uniform)0 1)))
-                ($c (append $acc $r))
-                (() (println! ("current expression  " $c)))
+(= (genG $n $gSpace $cSpace $tSpace $genSpace $start $random $id)
+    (if (>= $n 1)
+        (let*
+            (   
+                (() (println! (""N"" $n)))
+                (() (setGenotype $gSpace $tSpace ((py-dot np random.uniform)0 1)))
+                ; (() (iCount $cSpace ((py-dot np random.uniform)0 1)))
+                ($i (genI $gSpace $cSpace $tSpace $start ((py-dot np random.uniform)0 1)))
+                ;; restet codon index 
+                (()(match $tSpace (codon-index $ind) (remove-atom $tSpace (codon-index $ind))))
+                (() (add-atom $tSpace (codon-index 0)))
+                ($g (getGeno $tSpace))
+                ($c (getCount $cSpace ((py-dot np random.uniform)0 1)))
+                (() (add-atom $genSpace ($id $i $g $c)))
+                ; (() (println! (match $genSpace ($id (indivdual $i) $g $c) $c)))
+                ($_ (iCount $cSpace ((py-atom random.random))))
             )
-            (if (== $t ())
-                $c
-                (iterate $func $arg1 $arg2 $t ((py-dot np random.uniform)0 1) $c)
-            ))))
-                ; ))
-;; ************ RUN RUN ***************
-;; ************ RUN RUN ***************
-;; ************ RUN RUN ***************
-;; ************ RUN RUN ***************
+            
+                (genG (- $n 1) $gSpace $cSpace $tSpace $genSpace $start ((py-atom random.random)) (+ $id 1))
+        )
+    ;    (let $i (genI $gSpace $tSpace $start ((py-atom random.random)))
+    ;         (add-atom $genSpace ($id (indivdual $i)))
+    ;    )
+    ; (empty)
+    ; (genG 0 $gSpace $cSpace $tSpace $genSpace $start ((py-atom random.random)) (+ $id 1))
+    ()
+    )
+)
 
-! (setGenotype &geno &grammar)
-! (initP &grammar)
-! (generateIndividual &grammar &geno start ((py-dot np random.uniform)0 1))
+(= (getGeno $tSpace)
+    (match $tSpace (genotype $g) $g))
 
-;; **************           **************
-;; **************   TO      **************
-;; **************     DO    **************
-;; **************           **************
-
-;; Optimization
-;; generating population
-;; ids for inidividuals and derivation option count for probablity update after scoring
-;; scoring
-
-;; :::::::::::::::::::: Generate :::::::::::::::::
-;; ::::::::::::::::::::::::::::: Population :::::::::::::::::
-
-;; TO DO
-;; generatePop function to call the generateIndividual function to generate popn of individuals
-;; initialize the genotype of every individual
-;; generate inidivdual -- set termination conditions for the individual generation (in generateIndividual)
-;; store every fit individual in a space
-;;      add id, genotype and derivation option count information together with the individual
-;;      possible dict format -- ⤵️ 
-;;                      (id 
-;;                             (inidvidual $inidvidual)
-;;                             (genotype $the_genotype)
-;;                             (count 
-;;                                   (
-;;                                      (nt_0 ((rule_0 count_0))) (nt_1 ((rule_0 count_0) 
-;;                                                                      (rule_1 count_1)
-;;                                                                      (rule_2 count_2)
-;;                                                                              :
-;;                                                                                     ))
-;;                                                            :
-;;                                                            :
-;;                                    )
-;;                              )
-;;                       )
-;; Proposed Procedure: 
-;;              main procedure genPop is called with spaces (grammar, popn space) and an accumulator with an id (=0) parameter assigned as (0)
-;;              generate indivdual expression (counting of used derivation rules is done here)
-;;              append the individual to (id) tuple -- (id (individual $individual))
-;;              append the genotype used in the generation of the 
-;;              individual $acc now --> (id (individual $individual) (genotype $genotype))
-;;              get the updated count of all the derivation rules and append to acc
-;;              acc now --> (id (individual $individual) (genotype $genotype) (count ()))
-;;              add this tuple to space
-;;              increment the id by 1, reset the derivation rule count and start the over untill popn is full 
-;; Parameters  
-;;          POP_SIZE
-;;          Space to store individual expressions
-;;          
-;; derivation option counter for each valid expression
-;;
-;; setInitialCount -- a function to get and initialize count of derivation options to 0
+;; iCount -- a function to get and initialize count of derivation options to 0
 ;; should be able to reset counts from previous iteration
-;; Note: the matching pattern may change depending on when the match is done -- 
-;;          if this is done after the initial probability assignment the correct patten 
-;;          is not ($nt (($rule) $x)) rather ($nt (($rule $prob) $x)) and vice versa
+;;              $gSpace -- grammar space
+;;              $cSpace -- production rule count space
+;;                  $nt -- a non-terminal 
+;;                  $r -- a production rule
+;;                  $i -- index
+;;                  $c -- referral count
  
-! (bind! &count (new-space))
+;; assign be zero count for each  production rule
+! (match &grammar ($nt $r $i) (add-atom &count ($nt $r 0 $i)))
 
-;; set initial rule count -- 0 for each rule
-(= (setInitialCount $grammarSpace $countSpace)
-    (match $grammarSpace ($nt (($rule) $x)) 
-        (add-atom $countSpace ($nt (($rule 0) $x)))
+(= (iCount $cSpace $random)
+    (collapse (match $cSpace ($nt $r $c $i) (let () (remove-atom $cSpace ($nt $r $c $i))
+                                        (add-atom $cSpace ($nt $r 0 $i)))
+    )))
+; (= (resetCount $cSpace $random)
+;     (let $nts (collapse (unique (match $cSpace ($nt $r $c $i) $nt)))
+;         (iCount $cSpace $nts ((py-dot np random.uniform)0 1))
+;     )
+; )
+;; prCounter -- increments a production rule's count by one when called
+;;              $cSpace -- count space
+;;              $nt -- a non-terminal
+;;              $r -- a production rule
+;;                  $c -- count variable
+;;                  $i -- index variable
+
+(= (prCounter $cSpace $nt $r $random)
+    (let* 
+        (
+            (($c $i) (match $cSpace ($nt $r $c $i) ($c $i)))
+            (() (remove-atom $cSpace ($nt $r $c $i)))
+            ($next (+ 1 $c))
+        )
+        (add-atom $cSpace ($nt $r $next $i))))
+
+
+(= (getCountSum $iCount $nt)
+    (sum (collapse (let $cs (superpose $iCount)
+            (unify $cs ($nt $r $c) $c
+                    ; (sum (collapse (let $rule (superpose $x)
+                    ;     (unify $rule ($y $count)
+                    ;         $count
+                    ;         (empty)
+                    ;     ))))
+                    (empty)
+            )))))
+
+;; getCount -- returns count of all production rules for appending to individual expression metta data
+;;              $cSpace -- count space
+;;                  $nt -- a non-terminal
+;;                  $r -- a production rule
+;;                  $c -- production rule referal count
+;;                  $i -- index
+
+(= (getCount $cSpace $random)
+   (collapse (match $cSpace ($nt $r $c $i) ($nt $r $c))))
+
+(= (getSum $cI $nts)
+    (collapse (let*
+        (
+            ($nt (unique (match &count ($nt $r $c $i) $nt)))
+        )
+       (unify $cI ($nt $r $c) $c (empty))
+    ))
+)
+
+! (genG 1 &grammar &count &geno &generation start ((py-dot np random.uniform)0 1) 0)
+
+; ! (get-atoms &generation)
+
+
+;; :::::::::::::::: SAMPLE OUTPUTS ::::::::::::::::
+
+; (0 (indivdual X) (genotype (0.126 0.859 0.231 0.164 0.233 0.418 0.247 0.275 0.115)) (count (expr (uop expr) 0) (expr (bop expr expr) 0) (expr term 1) (term Y 0) (term X 1) (uop NOT 0) (start expr 1) (bop AND 0) (bop OR 0))), 
+
+; (1 (indivdual X) (genotype (0.126 0.859 0.231 0.164 0.233 0.418 0.247 0.275 0.115)) (count (expr (bop expr expr) 0) (expr (uop expr) 0) (expr term 1) (term Y 0) (term X 1) (uop NOT 0) (start expr 1) (bop AND 0) (bop OR 0))), 
+
+
+; (2 (indivdual (NOT Y)) (genotype (0.126 0.859 0.231 0.164 0.233 0.418 0.247 0.275 0.115)) (count (expr (bop expr expr) 0) (expr (uop expr) 1) (expr term 1) (term Y 1) (term X 0) (uop NOT 1) (start expr 1) (bop AND 0) (bop OR 0)))
+
+
+;; ::::::::::::: test phonetype generation :::::::::::::::
+; ! (setGenotype &grammar &geno ((py-dot np random.uniform)0 1))
+; ! (genPhen &grammar &count &geno (start expr bop uop term) start ((py-dot np random.uniform)0 1))
+;; ::::::::::::: test phonetype generation :::::::::::::::
+
+;; :::::::::::::::: UPDATE PROBABILITIES ::::::::::::::::
+;; updateProbablity -- updates probability of a derivation rules based on count information from &count space 
+;;              $gSpace -- grammar space
+;;              $genSpace -- generation space
+;;              $id -- ID of an expression in the genaration space 
+;;;             $lambda -- learning factor
+;;                  ($id $i $g $c) -- (id of an individual expression, the expression itself, genotype used for generation, production rule reference counts)
+;;                  ($nt $r $i) -- (a non-terminal, a production rule, production rule index) as found in the &grammar space
+;;                  $sums -- sums of counts of all production rule referals of all non-terminals (superposed)
+
+(= (updateProbability $gSpace $genSpace $id $lambda)
+    (let*
+        (
+            ($c (match $genSpace ($id $i $g $c) $c))
+            ($counts (superpose $c))
+            ($nt (unique (match $gSpace ($nt $r $i) $nt)))
+            ($sums (getCountSum $c $nt))
+        )
+        (unify $counts ($nt $r $cnt) 
+                (if (== $cnt 0)
+                    (let* 
+                        (
+                            (($nt $r $oldP $i) (match &grammar ($nt $r $p $i) ($nt $r $p $i)))
+                            ($newP (rd (- $oldP (* $lambda $oldP)) 3))
+                            (() (remove-atom &grammar ($nt $r $oldP $i)))
+                        )
+                        (add-atom &grammar ($nt $r $newP $i))
+                    )
+                    (let*
+                        (
+                            (($nt $r $oldP $i) (match &grammar ($nt $r $p $i) ($nt $r $p $i)))
+                            ($incP (+ $oldP (/ (* $cnt $lambda) $sums)))
+                            ($newP (rd (min $incP 1) 3))
+                            (() (remove-atom &grammar ($nt $r $oldP $i)))
+                        )
+                        (add-atom &grammar ($nt $r $newP $i))
+                    )
+                )
+                    (empty))))
+
+
+;; normalizeP -- adjusts probabilities of derivation rules sum to be exactly one
+;;        chucks if sum of probablities of all rules is greater than one
+;;        if so, subtract from all derivation rules the same amount given by the following formula
+;;              $gSpace -- grammar space
+;;                  ($nt $r $i) -- (a non-terminal, a production rule, index)
+;;                  $probSums -- sum of probabilties of all production rules of a non-terminal
+;;                  $j -- number of production rules of a non-terminal
+;;                  $diff -- difference of sum of probabilities of all production rules of a non-terminal from 1 (unity)
+
+(= (normalizeP $gSpace)
+    (let*
+        (
+            ($nt (unique (match $gSpace ($nt $r $i) $nt)))
+            ($probSums (sum (collapse (match $gSpace ($nt $r $p $i) $p))))
+            ($j (sum (collapse (match $gSpace ($nt $r $p $i) 1))))
+            ($diff (rd (/ (- 1 $probSums) $j) 3))
+            (($oldProb $newProb $r $i) (match $gSpace ($nt $r $p $i) ($p (rd (+ $p $diff) 3) $r $i)))
+            ; ($oldProb (match $grammarSpace ($nt (($rule $prob) $index))))
+            (() (println! ("new P  " $newProb)))
+            (() (remove-atom $gSpace ($nt $r $oldProb $i)))
+        )
+        
+        (add-atom $gSpace ($nt $r $newProb $i))
     ))
 
-;; update rule count -- increment rule count by one when called
+! (get-atoms &grammar)
 
-(= (updateRuleCount $countSpace $nt $rule)
-    (let* 
-        (
-            (($count $index) (match $countSpace ($nt (($rule $c) $x)) ($c $x)))
-            (() (remove-atom $countSpace ($nt (($rule $count) $index))))
-            ($next (+ 1 $count))
-        )
-        (add-atom $countSpace ($nt (($rule $next) $index)))
-    )
+! (updateProbability &grammar &generation 0 0.05)
+
+! (get-atoms &grammar)
+
+! (normalizeP &grammar)
+
+! (get-atoms &grammar)
+
+;: genPop -- the main loop generating a population of expressions by generating generation of expressions
+;;  evaluate each individual and store the necessary meta data about the indivdual in a separate space -- &population
+;;  uses a random boolean value to determine which pool of scored individuals to choose from (the current generation or best overall)
+;;              $ngen -- number of genrations in the population
+;;              $ni -- number of $indivduals in a genrations
+
+! (bind! &population (new-space))
+
+(= (genPop $args $ngen $ni)
+    ()
 )
-;; test setInitialCount
-
-; ! (setInitialCount &grammar &count)
-;; update a rule associated with an nt
-; ! (updateRuleCount &count expr var)
-
-;; test update
-; ! (match &count (expr ((var $c)) $index) (var $c)) -- should be (var 1)
-
-; ! (get-atoms &count)
 
 
-(= (getRuleCount $countSpace $ntSet $acc)
+;;    ::::::::::::::                      ::::::::::::::::::     ;;
+;;    :::::::::::::: VARIATION OPERATORS  ::::::::::::::::::     ;;
+;;    ::::::::::::::                      ::::::::::::::::::     ;;
+
+;; This function performs one point CrossOver. The function takes two parent genotypes and returns a child genotype
+;; Example: 
+;;         (crossover (1 2 3 4 5) (6 7 8 9 10)) if random index is 2
+;;          p1 = (1 2 3 4 5)  -> (1 2 3) (4 5)
+;;          p2 = (6 7 8 9 10) -> (6 7 8) (9 10)
+;;          child = (1 2 3 9 10) 
+;; note: we are only consider one child even though two children are possible
+
+(= (crossover $p1 $p2)
     (let*
         (
-            ($nt $t) (decons $ntSet)
-            ($rulesCount (collapse (match $countSpace ($nt (($rule $count)) $index))))
-            ($carry (append $acc ($nt $rulesCount)))
+            ($len (len $p1))
+            ($rand ((py-atom random.randint) 0 (- $len 1)))
+            
+            (($head $tail) (slice $p1 $rand ()))
+            (($head2 $tail2) (slice $p2 $rand ()))
+            (() (println! ($rand $len $tail)))
+            (() (println! ($head2 $tail2)))
         )
-        (if (== $t ())
-            $carry
-            (getRuleCount $countSpace $t $carry)
+        (concatTuple $head $tail2)
+
+    )
+)
+
+; ;; This function performs mutation on a given genotype. Each codon in the genotype has a probability of mutation
+; ;; If a codon is selected for mutation, it is replaced with a new random value
+; ;; Example:
+; ;;         (mutate (1 2 3 4 5) 0.1 ()) -> (1 2 3 4 5) with a low probability of mutation
+; ;;         (mutate (1 2 3 4 5) 0.9 ()) -> (x x x x x) with a high probability of mutation
+
+(= (mutate $genotype $probMutation)
+    (if (== $genotype ())
+        () 
+        (let* (
+                ($head (car-atom $genotype))
+                ($tail (cdr-atom $genotype))
+                ($rand (rd ((py-dot np random.uniform) 0 1) 15))  ;; Generate a random number in [0,1] (rounded to 3 decimal places for precision)
+                ($newCodon (if (< $rand $probMutation)            ;; If the random number is less than the probability of mutation, replace the codon with a new random value
+                              (rd ((py-dot np random.uniform) 0 1) 3)  
+                              $head))  
+                ($rest (mutate $tail $probMutation))
+            )
+            (cons-atom $newCodon $rest)  
         )
     )
 )
 
-; ! (get-atoms &count) ; --> 4
-;; genPop -- generates poulation and stores each individual to the popSpace
-;; $id for the 
-! (bind! &popn (new-space))
+(= (tournament $population $tSize)
+    (let*
+        (
+            ($index (repeat (py-atom random.randint) 0 (len $population) $tSize))
+            ($selected (collapse (match $genSpace ($genid $id $i $c $score))))
+        )
 
-; (= (generateIndividual $grammarSpace $start $random)
-; (= (getNt $grammarSpace)
-; ! (setGenotype &grammar 9)
-; ! (initP &grammar)
-
-(= (genPop $popSize $grammarSpace $popSpace $id)
-
+    )
 )
+
+;  !(crossover (1 2 3 4 5) (6 7 8 9 10))
+; !(mutate (0.1 0.2 0.3 0.4 0.5) 0.3 )
