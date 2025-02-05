@@ -5,7 +5,7 @@
 ! (bind! np (py-atom numpy))
 ! (bind! rd (py-atom round))
 
-;; &grammar -- space for grammar rule, genotype
+;; &grammar -- space for grammar rule, genotype, count
 ! (bind! &grammar (new-space))
 ! (bind! &geno (new-space))
 ! (bind! &count (new-space))
@@ -25,8 +25,9 @@
 ;; Parameters:- 
 ;;          $n length of the genotype tuple
 ;;          $prec signinfican digits for round function
+;; Variables:-
 ;;          $r a random float in the range (0 1) 
-;;          $c carries recursive calls to the createGenotype function with updated length (- $len 1) parameter
+;;          $c carries recursive calls to the createGenotype function with updated length (- $n 1) parameter
 ;; Example :- 
 ;;          (createGenotype 9 3)
 ;;          -- 1st run -- (0.227 0.584 0.498 0.364 0.912 0.881 0.504 0.206 0.119)
@@ -43,7 +44,21 @@
                 ($c (createGenotype (- $n 1) $prec ((py-dot np random.uniform)0 1)))
             )
             (cons-atom $r $c))))
-    
+
+
+;; genGenotypes -- for $num greaterthan 0 and lessthan 5 it creates $num genotypes
+;; Parameters :- 
+;;          $num -- number of genotype we need to have
+(= (genGenotypes $num $random) (
+    (if (or (> $num 5) (== $num 0))
+        ()
+        (let*
+            (
+                ($n (sum (collapse (match $gSpace ($nt $r $i) 1))))
+                (() createGenotype $n 3 ((py-dot np random.uniform)0 1))
+            )
+            (genGenotypes (- $num 1)))
+        )))
 ;; setGenotype -- calculates the number of all derivation rules ($n) and calls the createGenotype 
 ;;                function to generate tuple of uniform random values of length $n
 ;;              gSpace -- grammar space
@@ -71,17 +86,17 @@
 ;; ::::::::::::: ASSIGNING INITIAL PROBABILITIES :::::::::::::
 ;; iProbs -- assigns equal probability values for production rules in a non-terminal
 ;;          counts the total number of production rules ($n) assigns 1/n to each production rule
-;;          adds the new production rule atoms to the sapce like ($nt $r $iP $i)
+;;          adds the new production rule atoms to the space like ($nt $r $iP $i)
 ;;          $gSpace -- grammar space
 ;;          $nts -- all unique non-terminals in the production rule
 ;;          $nt -- a non-terminal
-;;          $r -- a 
+;;          $r -- a production rule
 ;;          $i -- production rule index
 ;;          $nr -- number of production rules for a non-terminal
 ;;          $iP -- initial probability
 ;;          3 -- decimal places to rounding off to
 ;; Note:-   iProbs doesn't remove the old grammar pattern it just adds a new pattern with probability values
-;;          So when queries with (get-atoms) attoms with the old pattern ($nt $r $i) are returned as well
+;;          So when queries with (get-atoms) atoms with the old pattern ($nt $r $i) are returned as well
 
 (= (iProbs $gSpace)
     (let*
@@ -108,7 +123,7 @@
 ;; $internal variables 
 ;;               $nt -- a non-terminal
 ;;               $r -- a production rule
-;;               $p -- probablity value associated with a 
+;;               $p -- probablity value associated with a rule
 ;;               $i -- production rule index
 ;; Examples:- 
 ;;               (getRule start &grammar 0.61 0 0) -- expr             
@@ -134,7 +149,7 @@
 ;;              $i -- index gotten from &geno (codon-index $i)
 ;;              $g -- a genotype tuple
 ;;              $len -- length of genotype tuple
-;;              $index -- value in the range [0 (- $len 1)] obtained using module 
+;;              $index -- value in the range [0 (- $len 1)] obtained using modules opreator 
 
 (= (getCodon $tSpace $gSpace $dummy)
     (let*
@@ -164,7 +179,7 @@
         (add-atom $tSpace (codon-index $next))))
 
 ;; ::::::::::::: GENERATE PHENOTYPE :::::::::::::
-;; genPhen -- generates phenotype starting from start symbol and using the genotype information to map productio rules
+;; genPhen -- generates phenotype starting from start symbol and using the genotype information to map production rules
 ;;          $gSpace -- grammar space
 ;;          $tSpace -- genotype space
 ;;          $start -- the start symbol
@@ -243,7 +258,7 @@
                 (() (setGenotype $gSpace $tSpace ((py-dot np random.uniform)0 1)))
                 ; (() (iCount $cSpace ((py-dot np random.uniform)0 1)))
                 ($i (genI $gSpace $cSpace $tSpace $start ((py-dot np random.uniform)0 1)))
-                ;; restet codon index 
+                ;; reset codon index 
                 (()(match $tSpace (codon-index $ind) (remove-atom $tSpace (codon-index $ind))))
                 (() (add-atom $tSpace (codon-index 0)))
                 ($g (getGeno $tSpace))
