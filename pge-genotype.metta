@@ -164,11 +164,6 @@
         (selectByIndex $g $index)))
 
 
-(= (selectByIndex $g $index) 
-    (if(== $index 0) 
-    (car-atom $g)
-    (selectByIndex (cdr-atom $g) (- $index 1)))
-)
 ;; updateIndex -- increments the codon-index value by 1 when called
 ;;              $tSpace -- genotype space
 ;;              $dummy -- needed to prevent metta from caching results of recursive calls
