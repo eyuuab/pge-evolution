@@ -50,7 +50,7 @@
 ;; Parameters :- 
 ;;          $num -- number of genotype we need to have
 (= (genGenotypes $num $random) (
-    (if (or (> $num 5) (== $num 0))
+    (if (== $num 0)
         ()
         (let*
             (
